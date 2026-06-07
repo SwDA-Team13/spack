@@ -30,6 +30,45 @@ Therefore, Spack can be described as having a Clean Architecture-like separation
 ## 1.4 - Component Level (C4 L3)
 ![image](../C4diagram/component-diagram.png)
 
+### Components and responsibilties
+- **Spec Parser**: Parses CLI-provided package specs into a structured `Spec` object
+- **Concretizer / Solver**: Builds a concrete build plan
+- **Installer / Build Engine**: Orchestrates the build / install workflow (`installer.py`, `build_environment.py`)
+- **Stage Manager**: Manages the build staging area (`stage.py`)
+- **Source Fetcher**: Pluggable download strategies (`fetch_strategy.py`)
+- **Binary Cache Client**: Pull / push of pre-built packages + indexes
+- **Build System Abstraction**: Abstraction layer for build tools (cmake, autotools, make, etc.)
+- **Store Manager**: Manages the install store / metadata in the file system and metadata database (**Install Store and Metadata** component)
+
+### SOLID Observations
+#### Single Responsibility Principle (SRP)
+We observed some violations of SRP, specifically within the Source Fetcher and Stage Manager.
+- **Source Fetcher** mixes fetching with terminal progress UI (`FetchProgress`, `_format_speed` and `format_bytes` in `fetch_strategy.py`).
+- **Stage Manager** similarly mixes staging with CLI tooling (`interactive_version_filter` and `get_checksums_for_versions` in `stage.py`). These methods bundle checksum/UX concerns into the staging component. 
+
+
+#### Open-Closed Principle (OCP)
+We found a minor OCP weakness in the way `Stage` uses `FetchStrategy`. FetchStrategy itsels follows OCP, but the way `Stage` checks for special cases with isinstance checks on `self.default_fetcher` and `self.fetcher` means that a new strategy might require modifications of other entities. 
+
+#### Liskov Substitution Principle (LSP)
+Related to the above minor OCP violation, we find that two derived classes seem to not adhere to their parent classes' interface contracts, thus violating the Liskov Substitution Principle.
+
+`BundleFetchStrategy` (from `fetchstrategy.py`) does not really do any fetching, and just returns `True`, breaking the implied promise of downloading something from a source. The class docstring seems to admit that this is not optimal, but that fixing it requires a refactor: 
+
+```
+TODO: Remove this class by refactoring resource handling and the link between composite stages and composite fetch strategies (see #11981)
+```
+
+`DevelopStage`'s `fetch()`, `check()` and `expand_archive()` methods also do nothing, as the class handles staging a local dev environment. 
+
+The classes are fakes / workarounds for local processes where the full fetching workflow isn't needed. They satisfy the parent class type without satisfying the expected behavior.  
+
+#### Interface Segregation Principle (ISP)
+No violations found for this principle
+
+#### Dependency Inversion Principle (DIP)
+No violations found for this principle
+
 ## 2 - Architectural Characteristics / Qualities
 
 ## 3 - Summary
