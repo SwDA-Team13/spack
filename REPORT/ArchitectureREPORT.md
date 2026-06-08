@@ -4,7 +4,7 @@ Software architecture report on the `spack` package management system.
 
 ## 1 - C4 Diagrams
 
-We have conducted a review of the source code within `lib/spack/spack` in the spack GitHub repository. 
+We have conducted a review of the source code within `lib/spack/spack` in the spack GitHub repository. The diagrams were created in *draw.io* with the C4 shapes collection.
 
 ## 1.2 - Context Level (C4 L1)
 ![image](../C4diagram/Context%20diagram.png)
@@ -38,7 +38,7 @@ Therefore, Spack can be described as having a Clean Architecture-like separation
 - **Source Fetcher**: Pluggable download strategies (`fetch_strategy.py`)
 - **Binary Cache Client**: Pull / push of pre-built packages + indexes
 - **Build System Abstraction**: Abstraction layer for build tools (cmake, autotools, make, etc.)
-- **Store Manager**: Manages the install store / metadata in the file system and metadata database (**Install Store and Metadata** component)
+- **Store Manager**: Manages the install store / metadata in the file system and metadata database (**Install Store and Metadata** container)
 
 ### SOLID Observations
 #### Single Responsibility Principle (SRP)
@@ -53,15 +53,13 @@ We found a minor OCP weakness in the way `Stage` uses `FetchStrategy`. FetchStra
 #### Liskov Substitution Principle (LSP)
 Related to the above minor OCP violation, we find that two derived classes seem to not adhere to their parent classes' interface contracts, thus violating the Liskov Substitution Principle.
 
-`BundleFetchStrategy` (from `fetchstrategy.py`) does not really do any fetching, and just returns `True`, breaking the implied promise of downloading something from a source. The class docstring seems to admit that this is not optimal, but that fixing it requires a refactor: 
+`BundleFetchStrategy` (from `fetch_strategy.py`) does not really do any fetching, and just returns `True`, breaking the implied promise of downloading something from a source. The class docstring seems to admit that this is not optimal, but that fixing it requires a refactor: 
 
 ```
 TODO: Remove this class by refactoring resource handling and the link between composite stages and composite fetch strategies (see #11981)
 ```
 
-`DevelopStage`'s `fetch()`, `check()` and `expand_archive()` methods also do nothing, as the class handles staging a local dev environment. 
-
-The classes are fakes / workarounds for local processes where the full fetching workflow isn't needed. They satisfy the parent class type without satisfying the expected behavior.  
+`DevelopStage`'s `fetch()`, `check()` and `expand_archive()` methods also do nothing, as the class handles staging a local dev environment. Both classes are fakes / workarounds for local processes where the full fetching workflow isn't needed. They satisfy the parent class type without satisfying the expected behavior.  
 
 #### Interface Segregation Principle (ISP)
 No violations found for this principle
@@ -71,5 +69,31 @@ No violations found for this principle
 
 ## 2 - Architectural Characteristics / Qualities
 
-## 3 - Summary
+Key characteristics of the spack system:
 
+### Extensibility
+The extensibility of the spack system is aparent through the use of pluggable fetch strategies, allowing different strategies to be added via a decorator (`fetcher(cls)` in `fetch_strategy.py`). New protocols and build systems can be added as subclasses. With few exceptions, spack adheres strongly to OCP (see [open closed priciple](#open-closed-principle-ocp)), a principle that promotes extensibility.
+
+### Adaptability
+The ease of adapting to changes in environment is crucial for a HPC environment. The architecture reflects this characteristic through host abstraction and layered YAML config files (see `config.py`) which lets the same install run on both a laptop and an HPC cluster.
+
+### Performance
+We observe that the performance characteristic has been taken into account in the spack system architecture. The [C4 component diagram](#14---component-level-c4-l3) shows the **Binary Cache Client**, which allows fetching pre-built binaries instead of building from source. This saves both time and compute. 
+Not shown in the component diagram is the local file system cache, defined in `caches.py`, which prevents repeatedly fetching the same files when building a package multiple times or multiple ways. 
+
+### Data Integrity
+The system does checksum verification on every fetch (`check()` in `fetch_strategy.py`) and uses cryptographically signed binary packages in **Binary Cache Client**.
+
+### Concurrency
+HPC environments can get greater benefit from concurrency than typical personal and enterprise environments. Spack promotes concurrency through parallel build jobs (defaults defined in `config.py`), which also supports the performance characteristic. 
+
+### Abstraction
+Abstraction is *the level at which parts of the system are isolated from other parts of the system (both internal and external system interactions)*. Spack abstracts interactions with external systems well, with dedicated gateway components (**Source Fetcher**, **Binary Cache Client**, **Build System Abstraction**, **Store Manager**) that fully isolate the core from external calls. 
+We did however encounter some weaknesses in internal abstraction, specifically the special case handling of fetch strategies in `stage.py` mentioned in the [SOLID section of the report](#solid-observations).
+
+## 3 - Summary
+Spack's architecture reflects its purpose as a package manager for HPC applications. Across the three C4 levels, we get a clear picture of the system:
+At the context level, Spack is a coordinator between its users and a set of external systems. At the container level it separates the CLI front-end from a Core Library, a package recipe repository and a persistent install store. At the component level the Core Library is organized into focused components for spec parsing, concretization, staging, fetching, building, binary cache interaction, and store management.
+The system's key architectural characteristics align well with its use case. **Extensibility** lets new protocols and build tools be added as self-registered subclasses with little to no change to existing code. **Performance** is critical where builds are expensive and is addressed by local caching and the use of pre-built binaries. **Adaptability** and **concurrency** follow from host abstraction, layered YAML configuration and parallell build jobs, while **data integrity** is protected by checksum verification and signed binaries. Spack's external **abstraction** appears clean, while it internally has some localized abstraction flaws. 
+
+Overall, we judge Spack's architecture to be well matched to its requirements. It prioritizes extensibility, performance and isolation from a diverse external environment. The identified shortcomings are confined to a few internal details which the project already seems to recognize.
