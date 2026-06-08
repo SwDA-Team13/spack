@@ -1,6 +1,6 @@
 # Software Architecture Analysis
 
-Software architecture report on the `spack` package management system.
+Software architecture report on the `Spack` package management system.
 
 ## 1 - C4 Diagrams
 
@@ -24,9 +24,10 @@ The container diagram also keeps external systems outside the Spack boundary. So
 ## Relationship with the Clean Architecture Blueprint
 Spack has some similarities with the Clean Architecture blueprint, but it is not a pure Clean Architecture system. Clean Architecture separates the core logic of a system from external technical details. In Spack, a similar separation can be observed.
 The core concepts of Spack are package specifications, packages, dependencies, variants, and concrete specs. These concepts describe what software should be installed, which dependencies are needed, which optional features are selected, and what the final installation plan looks like. They form the central package-management model of Spack.
-Around these core concepts, Spack has components that coordinate the main workflows. For example, the concretizer turns an abstract user request into a concrete installation plan. The installer coordinates the process of fetching, building, installing, and recording packages. The build-system abstraction, binary cache client, and store manager support these workflows.
+Around these core concepts, Spack has components that coordinate the main workflows. For example, the concretizer turns an abstract user request into a concrete installation plan. The installer coordinates the process of fetching, building, installing, and recording packages. The concretizer and installer depend on a ring of interface adapters / gateways; the build-system abstraction, binary cache client, store manager, stage manager and source fetcher. These adapaters / gateways translate the workflow's needs into concrete interactions with the outer layer.
 The outer layer contains technical details that Spack depends on but does not fully control. These include source repositories, compilers, build tools, binary caches, mirrors, the filesystem, shell commands, the operating system, and HPC module systems. They are necessary for Spack to work, but they are not the core package-management model itself.
-Therefore, Spack can be described as having a Clean Architecture-like separation between core concepts, application workflows, and external infrastructure. However, because Spack is a practical package manager, it must still interact closely with the filesystem, shell, environment variables, compilers, and external commands. For this reason, it should not be described as a strict implementation of Clean Architecture.
+Therefore, Spack can be described as having a Clean Architecture-like separation between core concepts, application workflows, and external infrastructure. However, it is not a strict implementation; the installer calls concrete gateways such as the binary cache client directly, and the stage manager inspects concrete fetch strategy types. The separation is present, but not strictly enforced.
+
 ## 1.4 - Component Level (C4 L3)
 ![image](../C4diagram/component-diagram.png)
 
@@ -69,16 +70,16 @@ No violations found for this principle
 
 ## 2 - Architectural Characteristics / Qualities
 
-Key characteristics of the spack system:
+Key characteristics of the Spack system:
 
 ### Extensibility
-The extensibility of the spack system is aparent through the use of pluggable fetch strategies, allowing different strategies to be added via a decorator (`fetcher(cls)` in `fetch_strategy.py`). New protocols and build systems can be added as subclasses. With few exceptions, spack adheres strongly to OCP (see [open closed priciple](#open-closed-principle-ocp)), a principle that promotes extensibility.
+The extensibility of the Spack system is aparent through the use of pluggable fetch strategies, allowing different strategies to be added via a decorator (`fetcher(cls)` in `fetch_strategy.py`). New protocols and build systems can be added as subclasses. With few exceptions, Spack adheres strongly to OCP (see [open closed priciple](#open-closed-principle-ocp)), a principle that promotes extensibility.
 
 ### Adaptability
 The ease of adapting to changes in environment is crucial for a HPC environment. The architecture reflects this characteristic through host abstraction and layered YAML config files (see `config.py`) which lets the same install run on both a laptop and an HPC cluster.
 
 ### Performance
-We observe that the performance characteristic has been taken into account in the spack system architecture. The [C4 component diagram](#14---component-level-c4-l3) shows the **Binary Cache Client**, which allows fetching pre-built binaries instead of building from source. This saves both time and compute. 
+We observe that the performance characteristic has been taken into account in the Spack system architecture. The [C4 component diagram](#14---component-level-c4-l3) shows the **Binary Cache Client**, which allows fetching pre-built binaries instead of building from source. This saves both time and compute. 
 Not shown in the component diagram is the local file system cache, defined in `caches.py`, which prevents repeatedly fetching the same files when building a package multiple times or multiple ways. 
 
 ### Data Integrity
